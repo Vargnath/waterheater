@@ -1,37 +1,30 @@
-#ifndef WH_SIM_H
-#define WH_SIM_H 1
+#pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
-#include <time.h>
-#include <math.h>
-
-#define SPECIFIC_HEAT_CAPACITY_WATER 4.182
-#define THRESHOLD_WATER_TEMP 100.0
-#define NANOSECONDS_IN_SEC 1000000000.0
-#define NANOSECONDS_IN_MSEC 1000000.0
 
 typedef enum {
 	OFF, ON
-} state_t;
+} sim_state_t;
+
+typedef struct sim_t sim_t;
 
 typedef struct {
-	state_t sd_state;			/* Current state of the heating unit */
-	uint64_t sd_update_time;	/* Timestamp of the last update in nanoseconds */
-	double sd_env_temp;			/* Environment temperature */
-	double sd_water_temp;		/* Current water temperature */
-	double sd_water_vol;		/* Amount of water in g (1.000 g ~ 1 l) */
-	double sd_power;			/* Power of the heating unit in W */
-} sim_t;
+	sim_state_t sim_state;
+	double sim_water_temp;
+	uint64_t sim_timestamp;
+} sim_temp_t;
 
-void init_sim(sim_t *sim, state_t state, double env_temp, double water_vol, double power);
+sim_t* sim_create(double water_volume, double power_capacity, double ambient_temp, double water_temp);
 
-int get_nanotime(uint64_t *timer);
+bool sim_free(sim_t* sim);
 
-int calc_heating(sim_t *sd);
+bool sim_start(sim_t* sim);
 
-int calc_cooling(sim_t *sd);
+bool sim_status(sim_t const* sim);
 
-int calc(sim_t *sd);
+bool sim_stop(sim_t* sim);
 
-#endif	// WH_SIM_H
+bool sim_control(sim_t* sim, sim_state_t sim_state);
+
+bool sim_gettemp(sim_temp_t* sim_temp, sim_t const* sim);
