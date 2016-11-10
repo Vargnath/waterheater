@@ -2,6 +2,7 @@
  * Important!
  * Add "pthread" and  "m" to "GCC C Linker" under "Libraries"!
  */
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>	/* uint64_t */
@@ -73,7 +74,7 @@ static int logln(FILE *stream, const char *format, ...) {
 		return -1;
 	}
 	/* Write the time */
-	uint32_t msecs = tspec.tv_nsec / NANOSECONDS_IN_MSEC;
+	uint32_t msecs = tspec.tv_nsec / 1000000000;
 	time_t rawtime = tspec.tv_sec;
 	struct tm *timeinfo = localtime(&rawtime);
 	if (fprintf(stream, "%02d:%02d:%02d.%03d: ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, msecs) < 0) {
@@ -101,9 +102,11 @@ static int logln(FILE *stream, const char *format, ...) {
  * Extracts information from the simulation and stores a status message in buffer.
  * Returns the number of characters stored in buffer, not including the terminating null character.
  */
-int statustostr(char *buffer, const sim_t *sim) {
+int statustostr(char* buffer, sim_t const* sim) {
 	/* "%lu" needs to be changes to "%llu" when compiling for ARM! */
-	return sprintf(buffer, "status %lf %s %lu", sim->sd_water_temp, ((sim->sd_state == ON) ? "ON" : "OFF"), sim->sd_update_time);
+	sim_temp_t sim_temp;
+	sim_gettemp(&sim_temp, sim);
+	return sprintf(buffer, "status %lf %s %" PRIu64 "", sim_temp.sim_water_temp, ((sim_temp.sim_state == ON) ? "ON" : "OFF"), sim_temp.sim_timestamp);
 }
 
 /*
@@ -112,20 +115,6 @@ int statustostr(char *buffer, const sim_t *sim) {
 void error(char *msg) {
 	logln(stderr, msg);
 	exit(EXIT_FAILURE);
-}
-
-/*
- * Keeps the information of the simulation up to date.
- */
-void* update_sim(void *sim_desc) {
-	sim_t *sim = (sim_t*)sim_desc;
-	while (1) {
-		if (calc(sim) < 0)
-			error("ERROR could not calculate temperature");
-//		logline("Current Temperature: %.3lf", sim->sd_water_temp);
-		usleep(1);
-	}
-	return 0;
 }
 
 /*
@@ -183,14 +172,14 @@ void* connection_handler(void *conn) {
 		if (strcmp(buffer, "control on") == 0) {
 			/* Turn the heater on! */
 			logline("<< [%s]: control on", client_addr);
-			sim->sd_state = ON;
+			sim_control(sim, ON);
 			statustostr(buffer, sim);
 			writeln(client_sock, buffer);
 			logline(">> [%s]: %s", client_addr, buffer);
 		} else if (strcmp(buffer, "control off") == 0) {
 			/* Turn the heater off! */
 			logline("<< [%s]: control off", client_addr);
-			sim->sd_state = OFF;
+			sim_control(sim, OFF);
 			statustostr(buffer, sim);
 			writeln(client_sock, buffer);
 			logline(">> [%s]: %s", client_addr, buffer);
@@ -289,8 +278,7 @@ int main(int argc, char **argv) {
 	logline("Simulation Water Volume: %.1lf l", (sim_water_vol / 1000));
 	logline("*******************************************");
 	/* Initialize the simulation */
-	sim_t sim;
-	init_sim(&sim, OFF, sim_env_temp, sim_water_vol, sim_power);
+	sim_t* sim = sim_create(sim_water_vol, sim_power, sim_env_temp, sim_env_temp);
 	/* Initialize the network socket */
 	socket_t sock;
 	if (init_socket(&sock) < 0)
@@ -303,14 +291,15 @@ int main(int argc, char **argv) {
 	client_t client;
 	pthread_t thread_id;
 	/* Start the simulation */
-	if (pthread_create(&thread_id, NULL, update_sim, (void*)&sim) < 0)
+	if (!sim_start(sim)) {
 		error("ERROR starting sim");
+	}
 	/* Wait for incoming connections */
 	while (accept_socket(&sock, &client) > 0) {
 		conn_t conn;
 		memset(&conn, 0, sizeof(conn_t));
 		conn.c_client = client;
-		conn.c_sim = &sim;
+		conn.c_sim = sim;
 		conn.c_upd_int = upd_interval;
 		char buffer[22];
 		clienttostr(buffer, &client);
@@ -321,6 +310,7 @@ int main(int argc, char **argv) {
 	}
 	if (client.s_desc < 0)	/* Socket is dead */
 		error("ERROR accepting client_addr");
+	sim_free(sim);
 	logline("Simulation terminated!\n");	/* It's dead! */
 	return EXIT_SUCCESS;
 }
