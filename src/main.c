@@ -1,6 +1,7 @@
 /*
  * Important!
  * Add "pthread" and  "m" to "GCC C Linker" under "Libraries"!
+ * Define symbol "_GNU_SOURCE"
  */
 #include <inttypes.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include <time.h>
 #include "sim.h"
 #include "net.h"
+#include "log.h"
 
 #define NET_DEFAULT_PORT 4242
 #define NET_MAX_PENDING 3
@@ -28,15 +30,10 @@
 #define SIM_DEFAULT_POWER 2000.0
 
 /* logln macro for stderror */
-#define logerror(format, ...) do { \
-	logln(stderr, format, ##__VA_ARGS__); \
-} while (0)
+#define logerror(format, ...) flogf(stderr, format, ##__VA_ARGS__)
 
 /* logln macro for stdout, prints only if verbose_flag is set */
-#define logline(format, ...) do { \
-	if (verbose_flag) \
-		logln(stdout, format, ##__VA_ARGS__); \
-} while (0)
+#define logline(format, ...) if (verbose_flag) flogf(stdout, format, ##__VA_ARGS__)
 
 /*
  * Contains all data the client's threads needs.
@@ -49,54 +46,6 @@ typedef struct {
 
 /* Flag set by "--verbose". */
 static int verbose_flag = 0;
-
-/*
- * Writes the string to the filestream and prefixes it with a timestamp.
- * If the string is written to stderr the corresponding error string will be appended in case errno is set.
- * Timestamp Format: 12:34:56.789
- * The string will be appended with a newline character.
- *
- * The function is thread-safe!
- * Returns 0 on success or -1 in case of error.
- */
-static int logln(FILE *stream, const char *format, ...) {
-	int err = errno;
-	/*
-	 * This function will be used by multiple thread simultaneously.
-	 * A mutex is used to make it thread-safe.
-	 */
-	static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-	pthread_mutex_lock(&lock);	/* Lock mutex */
-	/* Get the time */
-	struct timespec tspec;
-	if (clock_gettime(CLOCK_REALTIME, &tspec) < 0) {
-		perror("ERROR could not get time");
-		return -1;
-	}
-	/* Write the time */
-	uint32_t msecs = tspec.tv_nsec / 1000000000;
-	time_t rawtime = tspec.tv_sec;
-	struct tm *timeinfo = localtime(&rawtime);
-	if (fprintf(stream, "%02d:%02d:%02d.%03d: ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, msecs) < 0) {
-		perror("ERROR could not write to stream");
-		return -1;
-	}
-	/* Write the string */
-	va_list args;
-	va_start(args, format);
-	if (vfprintf(stream, format, args) < 0) {
-		perror("ERROR could not write to stream");
-		return -1;
-	}
-	va_end(args);
-	/* Write the error (if possible) */
-	if (stream != stderr || err == 0)
-		fprintf(stream, "\n");
-	else
-		fprintf(stream, ": %s\n", strerror(errno));
-	pthread_mutex_unlock(&lock);	/* Unlock mutex */
-	return 0;
-}
 
 /*
  * Extracts information from the simulation and stores a status message in buffer.
@@ -113,7 +62,7 @@ int statustostr(char* buffer, sim_t const* sim) {
  * Prints the error message and exits the application with EXIT_FAILURE.
  */
 void error(char *msg) {
-	logln(stderr, msg);
+	flogf(stderr, msg);
 	exit(EXIT_FAILURE);
 }
 
