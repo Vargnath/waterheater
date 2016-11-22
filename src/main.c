@@ -14,6 +14,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
@@ -40,7 +41,7 @@
  */
 typedef struct {
 	unsigned c_upd_int;
-	client_t c_client;
+	socket_t c_client;
 	sim_t *c_sim;
 } conn_t;
 
@@ -71,15 +72,15 @@ void error(char *msg) {
  */
 void* status_handler(void *conn) {
 	sim_t *sim = ((conn_t*)conn)->c_sim;
-	int client_sock = ((conn_t*)conn)->c_client.s_desc;
+	socket_t client_sock = ((conn_t*)conn)->c_client;
 	unsigned interval = ((conn_t*)conn)->c_upd_int;
-	char client_addr[22];
-	clienttostr(client_addr, &((conn_t*)conn)->c_client);
+	char client_addr[22] = {0};
+	socket_getpeer(client_sock, client_addr, 22);
 	char buffer[NET_BUFFER_SIZE];
 	while (1) {
 		memset(buffer, 0, NET_BUFFER_SIZE);
 		statustostr(buffer, sim);
-		if (writeln(client_sock, buffer) < 0) {
+		if (socket_writeln(client_sock, buffer) < 0) {
 			logerror("[%s]: ERROR sending data", client_addr);
 			break;
 		}
@@ -94,10 +95,10 @@ void* status_handler(void *conn) {
  */
 void* connection_handler(void *conn) {
 	sim_t *sim = ((conn_t*)conn)->c_sim;
-	int client_sock = ((conn_t*)conn)->c_client.s_desc;
+	socket_t client_sock = ((conn_t*)conn)->c_client;
 	int read_size = 0;
-	char client_addr[22];
-	clienttostr(client_addr, &((conn_t*)conn)->c_client);
+	char client_addr[22] = {0};
+	socket_getpeer(client_sock, client_addr, 22);
 	char buffer[NET_BUFFER_SIZE];
 	memset(buffer, 0, NET_BUFFER_SIZE);
 	pthread_t thread_id;
@@ -105,7 +106,7 @@ void* connection_handler(void *conn) {
 	if (pthread_create(&thread_id, NULL, status_handler, (void*)conn) < 0) {
 		logerror("ERROR starting status handler");
 		logline(">> [%s]: error", client_addr);
-		writeln(client_sock, "error");
+		socket_writeln(client_sock, "error");
 		close(client_sock);
 	}
 	/* Read incoming data */
@@ -123,26 +124,26 @@ void* connection_handler(void *conn) {
 			logline("<< [%s]: control on", client_addr);
 			sim_control(sim, ON);
 			statustostr(buffer, sim);
-			writeln(client_sock, buffer);
+			socket_writeln(client_sock, buffer);
 			logline(">> [%s]: %s", client_addr, buffer);
 		} else if (strcmp(buffer, "control off") == 0) {
 			/* Turn the heater off! */
 			logline("<< [%s]: control off", client_addr);
 			sim_control(sim, OFF);
 			statustostr(buffer, sim);
-			writeln(client_sock, buffer);
+			socket_writeln(client_sock, buffer);
 			logline(">> [%s]: %s", client_addr, buffer);
 		} else if (strcmp(buffer, "request") == 0) {
 			/* Send your status! */
 			logline("<< [%s]: request", client_addr);
 			statustostr(buffer, sim);
-			writeln(client_sock, buffer);
+			socket_writeln(client_sock, buffer);
 			logline(">> [%s]: %s", client_addr, buffer);
 		} else {
 			/* Unknown command! */
 			logline("<< [%s]: %s", client_addr, buffer);
 			logerror("[%s]: ERROR received unknown command: %s", client_addr, buffer);
-			writeln(client_sock, "error");
+			socket_writeln(client_sock, "error");
 			logline(">> [%s]: error", client_addr);
 		}
 		/* Clean up */
@@ -230,34 +231,39 @@ int main(int argc, char **argv) {
 	sim_t* sim = sim_create(sim_water_vol, sim_power, sim_env_temp, sim_env_temp);
 	/* Initialize the network socket */
 	socket_t sock;
-	if (init_socket(&sock) < 0)
+	if ((sock = socket_init()) < 0) {
 		error("ERROR opening socket");
-	if (bind_socket(&sock, net_port) < 0)
+	}
+	if (!socket_bind(sock, net_port)) {
 		error("ERROR binding socket");
-	if (listen_socket(&sock, NET_MAX_PENDING) < 0)
+	}
+	if (!socket_listen(sock, NET_MAX_PENDING)) {
 		error("ERROR listening socket");
+	}
 	logline("Waiting for incoming connections on port %i", net_port);
-	client_t client;
+	struct sockaddr_in client = {0};
+	socklen_t client_len = 0;
 	pthread_t thread_id;
+	socket_t csock = 0;
 	/* Start the simulation */
 	if (!sim_start(sim)) {
 		error("ERROR starting sim");
 	}
 	/* Wait for incoming connections */
-	while (accept_socket(&sock, &client) > 0) {
+	while ((csock = socket_accept(sock, &client, &client_len)) != -1) {
 		conn_t conn;
 		memset(&conn, 0, sizeof(conn_t));
-		conn.c_client = client;
+		conn.c_client = csock;
 		conn.c_sim = sim;
 		conn.c_upd_int = upd_interval;
-		char buffer[22];
-		clienttostr(buffer, &client);
+		char buffer[22] = {0};
+		socket_getpeer(csock, buffer, 22);
 		logline("[%s] has connected!", buffer);
 		/* Start the connection handler */
 		if (pthread_create(&thread_id, NULL, connection_handler, (void*)&conn) < 0)
 			error("ERROR creating connection handler");
 	}
-	if (client.s_desc < 0)	/* Socket is dead */
+	if (csock < 0)	/* Socket is dead */
 		error("ERROR accepting client_addr");
 	sim_free(sim);
 	logline("Simulation terminated!\n");	/* It's dead! */
