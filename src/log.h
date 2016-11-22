@@ -18,4 +18,4 @@
 
 #include <stdio.h>
 
-int flogf(FILE* stream, char const* format, ...);
+int flogf(FILE* stream, char const format[static 1], ...);

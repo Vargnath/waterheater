@@ -15,14 +15,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>. */
 
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include "log.h"
 
 #define NS_IN_MSEC 1000000
 
-int flogf(FILE* stream, char const* format, ...) {
+int flogf(FILE* stream, char const format[static 1], ...) {
 	struct timespec tspec;
 	if (clock_gettime(CLOCK_REALTIME, &tspec) == -1) {
 		// errno was set by clock_gettime
