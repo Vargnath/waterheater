@@ -142,7 +142,7 @@ void* sim_thread_handle(void* sim_ptr) {
 		usleep(100);
 	}
 	sim->sim_thread = 0;
-	return 0;
+	pthread_exit(0);
 }
 
 bool sim_start(sim_t* sim) {
