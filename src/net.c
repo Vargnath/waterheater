@@ -64,7 +64,7 @@ int socket_readln(socket_t socket, char buffer[static 1], size_t size) {
 		}
 		if (total_bytes < size - 1) {
 			++total_bytes;
-			*buffer = ch;
+			*buffer = (ch != '\r' ? ch : '\0');
 			++buffer;
 		}
 		if (ch == '\n') {
@@ -72,7 +72,6 @@ int socket_readln(socket_t socket, char buffer[static 1], size_t size) {
 		}
 	}
 	*buffer = '\0';
-	printf("buffer");	// XXX Debug code
 	return total_bytes;
 }
 
