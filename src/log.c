@@ -19,7 +19,7 @@
 #include <time.h>
 #include "log.h"
 
-#define NS_IN_MSEC 1000000
+#define LOG_NS_IN_MSEC 1000000
 
 int flogf(FILE* stream, char const format[static 1], ...) {
 	struct timespec tspec;
@@ -27,7 +27,7 @@ int flogf(FILE* stream, char const format[static 1], ...) {
 		// errno was set by clock_gettime
 		return -1;
 	}
-	int msecs = tspec.tv_nsec / NS_IN_MSEC;
+	int msecs = tspec.tv_nsec / LOG_NS_IN_MSEC;
 	struct tm* timeinfo = localtime(&tspec.tv_sec);
 	char* timestamp = 0;
 	if (asprintf(&timestamp, "%02d:%02d:%02d.%03d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, msecs) == -1) {
