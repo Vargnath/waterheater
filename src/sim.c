@@ -21,9 +21,9 @@
 #include <unistd.h>
 #include "sim.h"
 
-#define SPECIFIC_HEAT_CAPACITY 4.182
-#define THRESHOLD_WATER_TEMP 100.0
-#define NS_IN_SEC 1000000000.0
+#define SIM_SPECIFIC_HEAT_CAPACITY 4.182
+#define SIM_THRESHOLD_WATER_TEMP 100.0
+#define SIM_NS_IN_SEC 1000000000.0
 
 typedef struct sim_t {
 	sim_state_t sim_heating_state;
@@ -43,7 +43,7 @@ bool get_timestamp(uint64_t* timer) {
 	}
 	struct timespec tspec;
 	if (clock_gettime(CLOCK_REALTIME, &tspec) == 0) {
-		*timer = tspec.tv_sec * NS_IN_SEC + tspec.tv_nsec;
+		*timer = tspec.tv_sec * SIM_NS_IN_SEC + tspec.tv_nsec;
 		return true;
 	}
 	// errno was set by clock_gettime
@@ -93,7 +93,7 @@ bool sim_heating_update(sim_t* sim) {
 	}
 	uint64_t timestamp = 0;
 	if (get_timestamp(&timestamp)) {
-		sim->sim_water_temp = sim->sim_water_temp + (sim->sim_power_capacity * (timestamp - sim->sim_updated_timestamp) / NS_IN_SEC) / (sim->sim_water_volume * SPECIFIC_HEAT_CAPACITY);
+		sim->sim_water_temp = sim->sim_water_temp + (sim->sim_power_capacity * (timestamp - sim->sim_updated_timestamp) / SIM_NS_IN_SEC) / (sim->sim_water_volume * SIM_SPECIFIC_HEAT_CAPACITY);
 		sim->sim_updated_timestamp = timestamp;
 		return true;
 	}
@@ -108,7 +108,7 @@ bool sim_cooling_update(sim_t* sim) {
 	}
 	uint64_t timestamp = 0;
 	if (get_timestamp(&timestamp)) {
-		sim->sim_water_temp = sim->sim_ambient_temp + (sim->sim_water_temp - sim->sim_ambient_temp) * exp(-((timestamp - sim->sim_updated_timestamp) / NS_IN_SEC) / sim->sim_water_volume);
+		sim->sim_water_temp = sim->sim_ambient_temp + (sim->sim_water_temp - sim->sim_ambient_temp) * exp(-((timestamp - sim->sim_updated_timestamp) / SIM_NS_IN_SEC) / sim->sim_water_volume);
 		sim->sim_updated_timestamp = timestamp;
 		return true;
 	}
@@ -130,7 +130,7 @@ void* sim_thread_handle(void* sim_ptr) {
 		break;
 		case ON:
 			sim_heating_update(sim);
-			if (sim->sim_water_temp >= THRESHOLD_WATER_TEMP) {
+			if (sim->sim_water_temp >= SIM_THRESHOLD_WATER_TEMP) {
 				sim->sim_heating_state = OFF;
 			}
 		break;
@@ -142,7 +142,7 @@ void* sim_thread_handle(void* sim_ptr) {
 		usleep(100);
 	}
 	sim->sim_thread = 0;
-	return 0;
+	pthread_exit(0);
 }
 
 bool sim_start(sim_t* sim) {

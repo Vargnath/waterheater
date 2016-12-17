@@ -53,7 +53,6 @@ static int verbose_flag = 0;
  * Returns the number of characters stored in buffer, not including the terminating null character.
  */
 int statustostr(char* buffer, sim_t const* sim) {
-	/* "%lu" needs to be changes to "%llu" when compiling for ARM! */
 	sim_temp_t sim_temp;
 	sim_gettemp(&sim_temp, sim);
 	return sprintf(buffer, "status %lf %s %" PRIu64 "", sim_temp.sim_water_temp, ((sim_temp.sim_state == ON) ? "ON" : "OFF"), sim_temp.sim_timestamp);
@@ -110,14 +109,10 @@ void* connection_handler(void *conn) {
 		close(client_sock);
 	}
 	/* Read incoming data */
-	while ((read_size = recv(client_sock, buffer, NET_BUFFER_SIZE - 1, 0)) > 0) {
-		/*
-		 * Because it's unsure if the line terminates with "\r\n" or "\n"
-		 * we try to remove both by replacing with '\0'.
-		 * Example: "control on\r\n" -> "control on"
-		 */
-		for (unsigned i = 0; buffer[i]; ++i)
-			buffer[i] = (buffer[i] != '\n' && buffer[i] != '\r') ? tolower(buffer[i]) : '\0';
+	while ((read_size = socket_readln(client_sock, buffer, NET_BUFFER_SIZE - 1)) > 0) {
+		/* Convert to lower case to simplify comparing */
+		for (size_t i = 0; buffer[i]; ++i)
+			buffer[i] = tolower(buffer[i]);
 		/* Parse the message */
 		if (strcmp(buffer, "control on") == 0) {
 			/* Turn the heater on! */
