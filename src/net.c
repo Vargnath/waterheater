@@ -92,7 +92,18 @@ int socket_getpeer(socket_t socket, char buffer[static 1], size_t size) {
 
 socket_t socket_init() {
 	// errno will be set by socket on failure
-	return socket(AF_INET, SOCK_STREAM, 0);
+	int sd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sd != -1) {
+		const int reuse = 1;
+		// errno will be set by setsockopt on failure
+		if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == 0) {
+#ifdef SO_REUSEPORT
+			// errno will be set by setsockopt on failure
+			setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+#endif
+		}
+	}
+	return sd;
 }
 
 bool socket_bind(socket_t socket, uint16_t port) {
