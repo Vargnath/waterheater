@@ -25,6 +25,10 @@
 #include "net.h"
 
 int socket_writeln(socket_t socket, char const format[static 1], ...) {
+	if (!format) {
+		errno = EINVAL;
+		return -1;
+	}
 	va_list args;
 	va_start(args, format);
 	char* buffer = 0;
@@ -44,7 +48,10 @@ int socket_writeln(socket_t socket, char const format[static 1], ...) {
 
 // TODO implement dynamic approach
 int socket_readln(socket_t socket, char buffer[static 1], size_t size) {
-	// XXX check for null pointer?
+	if (!buffer) {
+		errno = EINVAL;
+		return -1;
+	}
 	int num_bytes = 0;
 	int total_bytes = 0;
 	char ch;
@@ -77,6 +84,10 @@ int socket_readln(socket_t socket, char buffer[static 1], size_t size) {
 
 // TODO handle IPv6
 int socket_getpeer(socket_t socket, char buffer[static 1], size_t size) {
+	if (!buffer) {
+		errno = EINVAL;
+		return -1;
+	}
 	struct sockaddr_in addr = {0};
 	socklen_t length_ptr = sizeof(addr);
 	if (getpeername(socket, (struct sockaddr*)&addr, &length_ptr) == -1) {

@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>. */
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <time.h>
@@ -22,6 +23,10 @@
 #define LOG_NS_IN_MSEC 1000000
 
 int flogf(FILE* stream, char const format[static 1], ...) {
+	if (!format) {
+		errno = EINVAL;
+		return -1;
+	}
 	struct timespec tspec;
 	if (clock_gettime(CLOCK_REALTIME, &tspec) == -1) {
 		// errno was set by clock_gettime
